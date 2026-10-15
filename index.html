@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Turbo Highway</title>
+    <title>Turbo Highway - 3D Retro</title>
     <style>
         * {
             box-sizing: border-box;
@@ -15,7 +15,7 @@
         body, html {
             width: 100%;
             height: 100%;
-            background: #000;
+            background: #05020a;
             overflow: hidden;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
@@ -26,14 +26,13 @@
             height: 100%;
             justify-content: space-between;
             align-items: center;
-            background: #0a0a0a;
         }
         canvas {
             width: 100% !important;
             height: 75vh !important;
-            background: #111;
+            background: linear-gradient(to bottom, #000428, #004e92);
             border-bottom: 4px solid #ff00ff;
-            box-shadow: 0 0 20px rgba(255, 0, 255, 0.3);
+            box-shadow: 0 0 25px rgba(255, 0, 255, 0.4);
         }
         #controls {
             width: 100%;
@@ -48,19 +47,20 @@
         .btn {
             flex: 0 0 46%;
             height: 80%;
-            background: rgba(0, 255, 255, 0.05);
+            background: rgba(0, 255, 255, 0.08);
             border: 3px solid #00ffff;
             border-radius: 16px;
             color: #00ffff;
             font-size: 24px;
             font-weight: bold;
             letter-spacing: 2px;
-            box-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
             cursor: pointer;
         }
         .btn:active {
-            background: rgba(0, 255, 255, 0.3);
+            background: rgba(0, 255, 255, 0.35);
             transform: scale(0.96);
+            box-shadow: 0 0 25px rgba(0, 255, 255, 0.8);
         }
     </style>
 </head>
@@ -82,34 +82,91 @@
 
         let score = 0;
         let highScore = localStorage.getItem('turboHighScore') || 0;
-        let gameSpeed = 4;
+        let gameSpeed = 5;
         let isPlaying = true;
 
-        const lanes = [75, 175, 275];
-        let currentLaneIndex = 1;
-
-        const player = {
-            width: 50,
-            height: 90,
-            y: 470
-        };
+        // 3D Perspective Road Setup
+        const horizonY = 200; // Where the road vanishes
+        const roadBottomWidth = 360;
+        const roadTopWidth = 60;
+        
+        // 3 Lanes (-1 = Left, 0 = Center, 1 = Right)
+        let playerLane = 0; 
+        let targetLaneOffset = 0;
+        let currentLaneOffset = 0;
 
         let obstacles = [];
+        let roadOffset = 0; // For moving road stripes effect
 
+        // --- Web Audio API Sound Generator (No external files needed) ---
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        // Play a quick retro sound effect
+        function playSound(type) {
+            if (!audioCtx) return;
+            try {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                let now = audioCtx.currentTime;
+
+                if (type === 'move') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.exponentialRampToValueAtTime(300, now + 0.08);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'score') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.setValueAtTime(880, now + 0.05);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                } else if (type === 'crash') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(120, now);
+                    osc.frequency.linearRampToValueAtTime(30, now + 0.4);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                }
+            } catch(e) {
+                // Audio context policy catch
+            }
+        }
+
+        // Controls
         const leftBtn = document.getElementById('leftBtn');
         const rightBtn = document.getElementById('rightBtn');
 
         function moveLeft(e) {
             if (e) e.preventDefault();
-            if (isPlaying && currentLaneIndex > 0) {
-                currentLaneIndex--;
+            initAudio();
+            if (isPlaying && playerLane > -1) {
+                playerLane--;
+                playSound('move');
             }
         }
 
         function moveRight(e) {
             if (e) e.preventDefault();
-            if (isPlaying && currentLaneIndex < lanes.length - 1) {
-                currentLaneIndex++;
+            initAudio();
+            if (isPlaying && playerLane < 1) {
+                playerLane++;
+                playSound('move');
             }
         }
 
@@ -119,18 +176,17 @@
         rightBtn.addEventListener('mousedown', moveRight);
 
         window.addEventListener('keydown', (e) => {
+            initAudio();
             if (e.key === 'ArrowLeft') moveLeft();
             if (e.key === 'ArrowRight') moveRight();
         });
 
         function spawnObstacle() {
-            const randomLane = Math.floor(Math.random() * lanes.length);
+            const lanes = [-1, 0, 1];
+            const randomLane = lanes[Math.floor(Math.random() * lanes.length)];
             obstacles.push({
-                x: lanes[randomLane] - 25,
-                y: -120,
-                width: 50,
-                height: 90,
-                color: '#ff00ff'
+                lane: randomLane,
+                z: 1.0 // Starts far away (z goes from 1.0 down to 0.0 as it approaches)
             });
         }
 
@@ -139,61 +195,124 @@
         function update() {
             if (!isPlaying) return;
 
+            // Smoothly slide player towards target lane position
+            let targetOffset = playerLane * 75;
+            currentLaneOffset += (targetOffset - currentLaneOffset) * 0.2;
+
+            // Clear Canvas (Sky gradient background)
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Lanes
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-            ctx.lineWidth = 3;
-            ctx.setLineDash([20, 20]);
+            // --- DRAW 3D PERSPECTIVE ROAD ---
+            let centerX = canvas.width / 2;
+
+            // Ground/Grass background
+            ctx.fillStyle = '#111a11';
+            ctx.fillRect(0, horizonY, canvas.width, canvas.height - horizonY);
+
+            // Road trapezoid
+            let roadTopLeft = centerX - roadTopWidth / 2;
+            let roadTopRight = centerX + roadTopWidth / 2;
+            let roadBottomLeft = centerX - roadBottomWidth / 2;
+            let roadBottomRight = centerX + roadBottomWidth / 2;
+
+            ctx.fillStyle = '#1b1b22';
             ctx.beginPath();
-            ctx.moveTo(125, 0); ctx.lineTo(125, canvas.height);
-            ctx.moveTo(225, 0); ctx.lineTo(225, canvas.height);
+            ctx.moveTo(roadTopLeft, horizonY);
+            ctx.lineTo(roadTopRight, horizonY);
+            ctx.lineTo(roadBottomRight, canvas.height);
+            ctx.lineTo(roadBottomLeft, canvas.height);
+            ctx.fill();
+
+            // Neon Road Edges (Cyan borders)
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(roadTopLeft, horizonY);
+            ctx.lineTo(roadBottomLeft, canvas.height);
+            ctx.moveTo(roadTopRight, horizonY);
+            ctx.lineTo(roadBottomRight, canvas.height);
             ctx.stroke();
-            ctx.setLineDash([]);
 
-            let targetX = lanes[currentLaneIndex] - 25;
-            player.x = targetX;
+            // Moving center dashed lines for speed illusion
+            roadOffset = (roadOffset + gameSpeed * 0.8) % 40;
+            ctx.strokeStyle = '#ff00ff';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([15, 25]);
+            ctx.lineDashOffset = -roadOffset;
+            ctx.beginPath();
+            ctx.moveTo(centerX, horizonY);
+            ctx.lineTo(centerX, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]); // reset dash
 
-            // Draw Player
-            ctx.fillStyle = '#00ffff';
-            ctx.fillRect(player.x, player.y, player.width, player.height);
-            ctx.fillStyle = '#000';
-            ctx.fillRect(player.x + 8, player.y + 15, player.width - 16, 20);
-
+            // --- SPAWN AND UPDATE 3D OBSTACLES ---
             spawnTimer++;
-            if (spawnTimer > 75) {
+            if (spawnTimer > 65) {
                 spawnObstacle();
                 spawnTimer = 0;
             }
 
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 let obs = obstacles[i];
-                obs.y += gameSpeed;
+                obs.z -= gameSpeed * 0.0035; // Move closer
 
-                // Draw Obstacle
-                ctx.fillStyle = obs.color;
-                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-                ctx.fillStyle = '#000';
-                ctx.fillRect(obs.x + 8, obs.y + 15, obs.width - 16, 20);
-
-                // Collision
-                if (
-                    player.x < obs.x + obs.width &&
-                    player.x + player.width > obs.x &&
-                    player.y < obs.y + obs.height &&
-                    player.y + player.height > obs.y
-                ) {
-                    triggerGameOver();
-                }
-
-                if (obs.y > canvas.height) {
+                if (obs.z <= 0.05) {
+                    // Passed player successfully
                     obstacles.splice(i, 1);
                     score += 10;
+                    playSound('score');
                     if (score % 50 === 0) gameSpeed += 0.5;
+                    continue;
+                }
+
+                // Project 3D coordinates to 2D Screen Space
+                let scale = 1 / obs.z;
+                let obsY = horizonY + (canvas.height - horizonY) * (1 - obs.z);
+                let roadWidthAtZ = roadTopWidth + (roadBottomWidth - roadTopWidth) * (1 - obs.z);
+                let laneWidthAtZ = roadWidthAtZ / 3;
+                let obsX = centerX + (obs.lane * laneWidthAtZ) - (laneWidthAtZ * 0.25);
+
+                let w = 60 * scale;
+                let h = 40 * scale;
+
+                // Draw 3D Obstacle Car (Magenta retro racer)
+                ctx.fillStyle = '#ff00ff';
+                ctx.fillRect(obsX, obsY - h, w, h);
+                // Details
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(obsX + w * 0.1, obsY - h * 0.8, w * 0.8, h * 0.3);
+
+                // --- COLLISION DETECTION (Player is at z ≈ 0.15) ---
+                if (obs.z < 0.22 && obs.z > 0.08) {
+                    if (obs.lane === playerLane) {
+                        playSound('crash');
+                        triggerGameOver();
+                        return;
+                    }
                 }
             }
 
-            // HUD
+            // --- DRAW 3D PLAYER CAR (Bottom foreground) ---
+            let pWidth = 110;
+            let pHeight = 70;
+            let pX = centerX - pWidth / 2 + currentLaneOffset;
+            let pY = canvas.height - 90;
+
+            // Player car body shadow/glow
+            ctx.shadowColor = '#00ffff';
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = '#00ffff';
+            ctx.fillRect(pX, pY, pWidth, pHeight);
+            ctx.shadowBlur = 0; // reset
+
+            // Windshield & details
+            ctx.fillStyle = '#050510';
+            ctx.fillRect(pX + 15, pY + 12, pWidth - 30, pHeight * 0.4);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(pX + 10, pY + pHeight - 12, 18, 8);
+            ctx.fillRect(pX + pWidth - 28, pY + pHeight - 12, 18, 8);
+
+            // --- HUD (Score & High Score) ---
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 22px sans-serif';
             ctx.textAlign = 'left';
@@ -233,10 +352,12 @@
         }
 
         function restartGame() {
+            initAudio();
             score = 0;
-            gameSpeed = 4;
+            gameSpeed = 5;
             obstacles = [];
-            currentLaneIndex = 1;
+            playerLane = 0;
+            currentLaneOffset = 0;
             isPlaying = true;
 
             leftBtn.onclick = null;
