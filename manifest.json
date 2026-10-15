@@ -1,0 +1,10 @@
+{
+  "name": "Turbo Highway 3D",
+  "short_name": "TurboHighway",
+  "description": "An immersive 3D retro arcade highway racing game with smooth lane controls and synthesized sound effects.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#05020a",
+  "theme_color": "#05020a",
+  "icons": []
+}
