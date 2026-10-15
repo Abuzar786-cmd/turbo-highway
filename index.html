@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Turbo Highway - 3D Retro</title>
+    <title>Turbo Highway - 3D Arcade</title>
     <style>
         * {
             box-sizing: border-box;
@@ -85,20 +85,17 @@
         let gameSpeed = 5;
         let isPlaying = true;
 
-        // 3D Perspective Road Setup
-        const horizonY = 200; // Where the road vanishes
+        const horizonY = 200;
         const roadBottomWidth = 360;
         const roadTopWidth = 60;
         
-        // 3 Lanes (-1 = Left, 0 = Center, 1 = Right)
         let playerLane = 0; 
-        let targetLaneOffset = 0;
         let currentLaneOffset = 0;
 
         let obstacles = [];
-        let roadOffset = 0; // For moving road stripes effect
+        let roadOffset = 0;
 
-        // --- Web Audio API Sound Generator (No external files needed) ---
+        // --- Web Audio API Sound Generator ---
         let audioCtx = null;
 
         function initAudio() {
@@ -107,7 +104,6 @@
             }
         }
 
-        // Play a quick retro sound effect
         function playSound(type) {
             if (!audioCtx) return;
             try {
@@ -143,9 +139,7 @@
                     osc.start(now);
                     osc.stop(now + 0.4);
                 }
-            } catch(e) {
-                // Audio context policy catch
-            }
+            } catch(e) {}
         }
 
         // Controls
@@ -184,32 +178,82 @@
         function spawnObstacle() {
             const lanes = [-1, 0, 1];
             const randomLane = lanes[Math.floor(Math.random() * lanes.length)];
+            const colors = ['#ff0055', '#ff9900', '#9900ff', '#00ffcc'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
             obstacles.push({
                 lane: randomLane,
-                z: 1.0 // Starts far away (z goes from 1.0 down to 0.0 as it approaches)
+                z: 1.0,
+                color: randomColor
             });
         }
 
         let spawnTimer = 0;
 
+        // --- Detailed Procedural Car Drawing Function ---
+        function drawCar(x, y, w, h, primaryColor, isPlayer = false) {
+            ctx.save();
+
+            // Tires
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x - w * 0.08, y - h * 0.7, w * 0.12, h * 0.4);
+            ctx.fillRect(x + w * 0.96, y - h * 0.7, w * 0.12, h * 0.4);
+            ctx.fillRect(x - w * 0.08, y - h * 0.2, w * 0.12, h * 0.4);
+            ctx.fillRect(x + w * 0.96, y - h * 0.2, w * 0.12, h * 0.4);
+
+            // Main Car Body (Chassis)
+            ctx.fillStyle = primaryColor;
+            ctx.beginPath();
+            ctx.roundRect(x, y - h, w, h, [8, 8, 4, 4]);
+            ctx.fill();
+
+            // Roof / Cabin
+            ctx.fillStyle = isPlayer ? '#002233' : '#111111';
+            ctx.beginPath();
+            ctx.roundRect(x + w * 0.15, y - h * 0.75, w * 0.7, h * 0.5, [6, 6, 2, 2]);
+            ctx.fill();
+
+            // Windshield & Rear Window
+            ctx.fillStyle = '#88ffff';
+            ctx.globalAlpha = 0.8;
+            // Front windshield
+            ctx.fillRect(x + w * 0.2, y - h * 0.7, w * 0.6, h * 0.22);
+            // Rear window
+            ctx.fillRect(x + w * 0.2, y - h * 0.38, w * 0.6, h * 0.12);
+            ctx.globalAlpha = 1.0;
+
+            // Headlights / Taillights glow
+            if (isPlayer) {
+                // Bright Cyan Headlights
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(x + w * 0.1, y - h * 0.15, w * 0.2, h * 0.1);
+                ctx.fillRect(x + w * 0.7, y - h * 0.15, w * 0.2, h * 0.1);
+            } else {
+                // Glowing Red Taillights
+                ctx.fillStyle = '#ff0000';
+                ctx.shadowColor = '#ff0000';
+                ctx.shadowBlur = 8;
+                ctx.fillRect(x + w * 0.1, y - h * 0.15, w * 0.2, h * 0.1);
+                ctx.fillRect(x + w * 0.7, y - h * 0.15, w * 0.2, h * 0.1);
+                ctx.shadowBlur = 0;
+            }
+
+            ctx.restore();
+        }
+
         function update() {
             if (!isPlaying) return;
 
-            // Smoothly slide player towards target lane position
             let targetOffset = playerLane * 75;
             currentLaneOffset += (targetOffset - currentLaneOffset) * 0.2;
 
-            // Clear Canvas (Sky gradient background)
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // --- DRAW 3D PERSPECTIVE ROAD ---
+            // --- Draw Road & Environment ---
             let centerX = canvas.width / 2;
 
-            // Ground/Grass background
             ctx.fillStyle = '#111a11';
             ctx.fillRect(0, horizonY, canvas.width, canvas.height - horizonY);
 
-            // Road trapezoid
             let roadTopLeft = centerX - roadTopWidth / 2;
             let roadTopRight = centerX + roadTopWidth / 2;
             let roadBottomLeft = centerX - roadBottomWidth / 2;
@@ -223,7 +267,7 @@
             ctx.lineTo(roadBottomLeft, canvas.height);
             ctx.fill();
 
-            // Neon Road Edges (Cyan borders)
+            // Neon Borders
             ctx.strokeStyle = '#00ffff';
             ctx.lineWidth = 4;
             ctx.beginPath();
@@ -233,7 +277,7 @@
             ctx.lineTo(roadBottomRight, canvas.height);
             ctx.stroke();
 
-            // Moving center dashed lines for speed illusion
+            // Center dashes
             roadOffset = (roadOffset + gameSpeed * 0.8) % 40;
             ctx.strokeStyle = '#ff00ff';
             ctx.lineWidth = 3;
@@ -243,21 +287,20 @@
             ctx.moveTo(centerX, horizonY);
             ctx.lineTo(centerX, canvas.height);
             ctx.stroke();
-            ctx.setLineDash([]); // reset dash
+            ctx.setLineDash([]);
 
-            // --- SPAWN AND UPDATE 3D OBSTACLES ---
+            // --- Obstacles ---
             spawnTimer++;
-            if (spawnTimer > 65) {
+            if (spawnTimer > 60) {
                 spawnObstacle();
                 spawnTimer = 0;
             }
 
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 let obs = obstacles[i];
-                obs.z -= gameSpeed * 0.0035; // Move closer
+                obs.z -= gameSpeed * 0.0035;
 
                 if (obs.z <= 0.05) {
-                    // Passed player successfully
                     obstacles.splice(i, 1);
                     score += 10;
                     playSound('score');
@@ -265,24 +308,19 @@
                     continue;
                 }
 
-                // Project 3D coordinates to 2D Screen Space
                 let scale = 1 / obs.z;
                 let obsY = horizonY + (canvas.height - horizonY) * (1 - obs.z);
                 let roadWidthAtZ = roadTopWidth + (roadBottomWidth - roadTopWidth) * (1 - obs.z);
                 let laneWidthAtZ = roadWidthAtZ / 3;
-                let obsX = centerX + (obs.lane * laneWidthAtZ) - (laneWidthAtZ * 0.25);
+                let obsX = centerX + (obs.lane * laneWidthAtZ) - (laneWidthAtZ * 0.3);
 
-                let w = 60 * scale;
-                let h = 40 * scale;
+                let w = 70 * scale;
+                let h = 45 * scale;
 
-                // Draw 3D Obstacle Car (Magenta retro racer)
-                ctx.fillStyle = '#ff00ff';
-                ctx.fillRect(obsX, obsY - h, w, h);
-                // Details
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(obsX + w * 0.1, obsY - h * 0.8, w * 0.8, h * 0.3);
+                // Draw Detailed Traffic Car
+                drawCar(obsX, obsY, w, h, obs.color, false);
 
-                // --- COLLISION DETECTION (Player is at z ≈ 0.15) ---
+                // Collision Check
                 if (obs.z < 0.22 && obs.z > 0.08) {
                     if (obs.lane === playerLane) {
                         playSound('crash');
@@ -292,27 +330,19 @@
                 }
             }
 
-            // --- DRAW 3D PLAYER CAR (Bottom foreground) ---
+            // --- Player Car ---
             let pWidth = 110;
             let pHeight = 70;
             let pX = centerX - pWidth / 2 + currentLaneOffset;
-            let pY = canvas.height - 90;
+            let pY = canvas.height - 85;
 
-            // Player car body shadow/glow
+            // Neon glow for player
             ctx.shadowColor = '#00ffff';
-            ctx.shadowBlur = 15;
-            ctx.fillStyle = '#00ffff';
-            ctx.fillRect(pX, pY, pWidth, pHeight);
-            ctx.shadowBlur = 0; // reset
+            ctx.shadowBlur = 18;
+            drawCar(pX, pY, pWidth, pHeight, '#00ffff', true);
+            ctx.shadowBlur = 0;
 
-            // Windshield & details
-            ctx.fillStyle = '#050510';
-            ctx.fillRect(pX + 15, pY + 12, pWidth - 30, pHeight * 0.4);
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(pX + 10, pY + pHeight - 12, 18, 8);
-            ctx.fillRect(pX + pWidth - 28, pY + pHeight - 12, 18, 8);
-
-            // --- HUD (Score & High Score) ---
+            // --- HUD ---
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 22px sans-serif';
             ctx.textAlign = 'left';
