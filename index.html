@@ -6,8 +6,8 @@
     <title>Turbo Highway - 3D Arcade</title>
     <meta name="description" content="An immersive 3D retro arcade highway racing game with smooth lane controls and synthesized sound effects.">
     
-    <!-- Embedded Web App Manifest for PWABuilder & Android APK Details -->
-    <link rel="manifest" href='data:application/manifest+json;charset=utf-8,{"name":"Turbo Highway 3D","short_name":"TurboHighway","description":"An immersive 3D retro arcade highway racing game with smooth lane controls and synthesized sound effects.","start_url":"./","display":"standalone","background_color":"%2305020a","theme_color":"%2305020a"}'>
+    <!-- Standard Web App Manifest Link for PWABuilder & Android APK -->
+    <link rel="manifest" href="manifest.json">
 
     <style>
         * {
@@ -420,7 +420,7 @@
             rightBtn.onclick = null;
             leftBtn.addEventListener('touchstart', moveLeft);
             rightBtn.addEventListener('touchstart', moveRight);
-            leftBtn.addEventListener('mousedown', moveLeft);
+            rightBtn.addEventListener('mousedown', moveLeft);
             rightBtn.addEventListener('mousedown', moveRight);
 
             requestAnimationFrame(update);
