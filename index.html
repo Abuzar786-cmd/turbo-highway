@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Turbo Highway</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background: #000;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #game-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            justify-content: space-between;
+            align-items: center;
+            background: #0a0a0a;
+        }
+        canvas {
+            width: 100% !important;
+            height: 75vh !important;
+            background: #111;
+            border-bottom: 4px solid #ff00ff;
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.3);
+        }
+        #controls {
+            width: 100%;
+            height: 22vh;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 15px;
+            background: #000;
+            padding-bottom: env(safe-area-inset-bottom, 10px);
+        }
+        .btn {
+            flex: 0 0 46%;
+            height: 80%;
+            background: rgba(0, 255, 255, 0.05);
+            border: 3px solid #00ffff;
+            border-radius: 16px;
+            color: #00ffff;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            box-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
+            cursor: pointer;
+        }
+        .btn:active {
+            background: rgba(0, 255, 255, 0.3);
+            transform: scale(0.96);
+        }
+    </style>
+</head>
+<body>
+    <div id="game-wrapper">
+        <canvas id="gameCanvas"></canvas>
+        <div id="controls">
+            <button id="leftBtn" class="btn">◀ LEFT</button>
+            <button id="rightBtn" class="btn">RIGHT ▶</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = 400;
+        canvas.height = 600;
+
+        let score = 0;
+        let highScore = localStorage.getItem('turboHighScore') || 0;
+        let gameSpeed = 4;
+        let isPlaying = true;
+
+        const lanes = [75, 175, 275];
+        let currentLaneIndex = 1;
+
+        const player = {
+            width: 50,
+            height: 90,
+            y: 470
+        };
+
+        let obstacles = [];
+
+        const leftBtn = document.getElementById('leftBtn');
+        const rightBtn = document.getElementById('rightBtn');
+
+        function moveLeft(e) {
+            if (e) e.preventDefault();
+            if (isPlaying && currentLaneIndex > 0) {
+                currentLaneIndex--;
+            }
+        }
+
+        function moveRight(e) {
+            if (e) e.preventDefault();
+            if (isPlaying && currentLaneIndex < lanes.length - 1) {
+                currentLaneIndex++;
+            }
+        }
+
+        leftBtn.addEventListener('touchstart', moveLeft);
+        rightBtn.addEventListener('touchstart', moveRight);
+        leftBtn.addEventListener('mousedown', moveLeft);
+        rightBtn.addEventListener('mousedown', moveRight);
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') moveLeft();
+            if (e.key === 'ArrowRight') moveRight();
+        });
+
+        function spawnObstacle() {
+            const randomLane = Math.floor(Math.random() * lanes.length);
+            obstacles.push({
+                x: lanes[randomLane] - 25,
+                y: -120,
+                width: 50,
+                height: 90,
+                color: '#ff00ff'
+            });
+        }
+
+        let spawnTimer = 0;
+
+        function update() {
+            if (!isPlaying) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Lanes
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([20, 20]);
+            ctx.beginPath();
+            ctx.moveTo(125, 0); ctx.lineTo(125, canvas.height);
+            ctx.moveTo(225, 0); ctx.lineTo(225, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            let targetX = lanes[currentLaneIndex] - 25;
+            player.x = targetX;
+
+            // Draw Player
+            ctx.fillStyle = '#00ffff';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(player.x + 8, player.y + 15, player.width - 16, 20);
+
+            spawnTimer++;
+            if (spawnTimer > 75) {
+                spawnObstacle();
+                spawnTimer = 0;
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let obs = obstacles[i];
+                obs.y += gameSpeed;
+
+                // Draw Obstacle
+                ctx.fillStyle = obs.color;
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                ctx.fillStyle = '#000';
+                ctx.fillRect(obs.x + 8, obs.y + 15, obs.width - 16, 20);
+
+                // Collision
+                if (
+                    player.x < obs.x + obs.width &&
+                    player.x + player.width > obs.x &&
+                    player.y < obs.y + obs.height &&
+                    player.y + player.height > obs.y
+                ) {
+                    triggerGameOver();
+                }
+
+                if (obs.y > canvas.height) {
+                    obstacles.splice(i, 1);
+                    score += 10;
+                    if (score % 50 === 0) gameSpeed += 0.5;
+                }
+            }
+
+            // HUD
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 22px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(`SCORE: ${score}`, 20, 35);
+            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.font = '14px sans-serif';
+            ctx.fillText(`HIGH: ${highScore}`, 20, 60);
+
+            requestAnimationFrame(update);
+        }
+
+        function triggerGameOver() {
+            isPlaying = false;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('turboHighScore', highScore);
+            }
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#ff00ff';
+            ctx.font = 'bold 40px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('CRASHED!', canvas.width / 2, canvas.height / 2 - 30);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '22px sans-serif';
+            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 15);
+
+            ctx.fillStyle = '#00ffff';
+            ctx.font = '18px sans-serif';
+            ctx.fillText('Tap buttons to Restart', canvas.width / 2, canvas.height / 2 + 65);
+
+            leftBtn.onclick = restartGame;
+            rightBtn.onclick = restartGame;
+        }
+
+        function restartGame() {
+            score = 0;
+            gameSpeed = 4;
+            obstacles = [];
+            currentLaneIndex = 1;
+            isPlaying = true;
+
+            leftBtn.onclick = null;
+            rightBtn.onclick = null;
+            leftBtn.addEventListener('touchstart', moveLeft);
+            rightBtn.addEventListener('touchstart', moveRight);
+            leftBtn.addEventListener('mousedown', moveLeft);
+            rightBtn.addEventListener('mousedown', moveRight);
+
+            requestAnimationFrame(update);
+        }
+
+        requestAnimationFrame(update);
+    </script>
+</body>
+</html>
