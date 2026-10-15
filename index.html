@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Turbo Highway - 3D Arcade</title>
-    <meta name="description" content="An immersive 3D retro arcade highway racing game with smooth lane controls and synthesized sound effects.">
+    <title>Turbo Highway - Simulator 3D</title>
+    <meta name="description" content="An immersive 3D highway driving simulator with realistic car tilt physics and glossy arcade graphics.">
     
-    <!-- Standard Web App Manifest Link for PWABuilder & Android APK -->
+    <!-- Standard Web App Manifest Link -->
     <link rel="manifest" href="manifest.json">
 
     <style>
@@ -20,7 +20,7 @@
         body, html {
             width: 100%;
             height: 100%;
-            background: #05020a;
+            background: #0b0f19;
             overflow: hidden;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
@@ -35,9 +35,9 @@
         canvas {
             width: 100% !important;
             height: 75vh !important;
-            background: linear-gradient(to bottom, #000428, #004e92);
-            border-bottom: 4px solid #ff00ff;
-            box-shadow: 0 0 25px rgba(255, 0, 255, 0.4);
+            background: linear-gradient(to bottom, #1a1c29, #0d3b66);
+            border-bottom: 4px solid #ff007f;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
         }
         #controls {
             width: 100%;
@@ -46,26 +46,28 @@
             justify-content: space-around;
             align-items: center;
             padding: 0 15px;
-            background: #000;
+            background: #080a10;
+            border-top: 2px solid #1f293d;
             padding-bottom: env(safe-area-inset-bottom, 10px);
         }
         .btn {
             flex: 0 0 46%;
             height: 80%;
-            background: rgba(0, 255, 255, 0.08);
-            border: 3px solid #00ffff;
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 120, 255, 0.2));
+            border: 2px solid #00d4ff;
             border-radius: 16px;
-            color: #00ffff;
-            font-size: 24px;
+            color: #00d4ff;
+            font-size: 22px;
             font-weight: bold;
             letter-spacing: 2px;
-            box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+            box-shadow: 0 0 15px rgba(0, 212, 255, 0.3);
             cursor: pointer;
+            transition: all 0.1s ease;
         }
         .btn:active {
-            background: rgba(0, 255, 255, 0.35);
+            background: rgba(0, 212, 255, 0.4);
             transform: scale(0.96);
-            box-shadow: 0 0 25px rgba(0, 255, 255, 0.8);
+            box-shadow: 0 0 25px rgba(0, 212, 255, 0.8);
         }
     </style>
 </head>
@@ -73,8 +75,8 @@
     <div id="game-wrapper">
         <canvas id="gameCanvas"></canvas>
         <div id="controls">
-            <button id="leftBtn" class="btn">◀ LEFT</button>
-            <button id="rightBtn" class="btn">RIGHT ▶</button>
+            <button id="leftBtn" class="btn">◀ STEER</button>
+            <button id="rightBtn" class="btn">STEER ▶</button>
         </div>
     </div>
 
@@ -86,21 +88,22 @@
         canvas.height = 600;
 
         let score = 0;
-        let highScore = localStorage.getItem('turboHighScore') || 0;
-        let gameSpeed = 5;
+        let highScore = localStorage.getItem('turboSimHighScore') || 0;
+        let gameSpeed = 6;
         let isPlaying = true;
 
-        const horizonY = 200;
-        const roadBottomWidth = 360;
-        const roadTopWidth = 60;
+        const horizonY = 210;
+        const roadBottomWidth = 380;
+        const roadTopWidth = 70;
         
         let playerLane = 0; 
         let currentLaneOffset = 0;
+        let carTilt = 0; // Physics tilt angle when turning
 
         let obstacles = [];
         let roadOffset = 0;
 
-        // --- Web Audio API Sound Generator ---
+        // --- Web Audio API Engine Sound ---
         let audioCtx = null;
 
         function initAudio() {
@@ -121,28 +124,28 @@
 
                 if (type === 'move') {
                     osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(150, now);
-                    osc.frequency.exponentialRampToValueAtTime(300, now + 0.08);
-                    gain.gain.setValueAtTime(0.1, now);
-                    gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
-                    osc.start(now);
-                    osc.stop(now + 0.08);
-                } else if (type === 'score') {
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(440, now);
-                    osc.frequency.setValueAtTime(880, now + 0.05);
-                    gain.gain.setValueAtTime(0.1, now);
+                    osc.frequency.setValueAtTime(120, now);
+                    osc.frequency.exponentialRampToValueAtTime(240, now + 0.1);
+                    gain.gain.setValueAtTime(0.08, now);
                     gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
                     osc.start(now);
                     osc.stop(now + 0.1);
+                } else if (type === 'score') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now); // C5
+                    osc.frequency.setValueAtTime(659.25, now + 0.06); // E5
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+                    osc.start(now);
+                    osc.stop(now + 0.12);
                 } else if (type === 'crash') {
                     osc.type = 'sawtooth';
-                    osc.frequency.setValueAtTime(120, now);
-                    osc.frequency.linearRampToValueAtTime(30, now + 0.4);
-                    gain.gain.setValueAtTime(0.3, now);
-                    gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+                    osc.frequency.setValueAtTime(100, now);
+                    osc.frequency.linearRampToValueAtTime(30, now + 0.5);
+                    gain.gain.setValueAtTime(0.25, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
                     osc.start(now);
-                    osc.stop(now + 0.4);
+                    osc.stop(now + 0.5);
                 }
             } catch(e) {}
         }
@@ -183,86 +186,96 @@
         function spawnObstacle() {
             const lanes = [-1, 0, 1];
             const randomLane = lanes[Math.floor(Math.random() * lanes.length)];
-            const colors = ['#ff0055', '#ff9900', '#9900ff', '#00ffcc'];
-            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            // Realistic car colors (Metallic red, dark silver, deep blue, gold)
+            const colorThemes = [
+                { primary: '#d90429', highlight: '#ff4d6d' },
+                { primary: '#2b2d42', highlight: '#8d99ae' },
+                { primary: '#3a86ff', highlight: '#8ecae6' },
+                { primary: '#ffb703', highlight: '#ffdda1' }
+            ];
+            const theme = colorThemes[Math.floor(Math.random() * colorThemes.length)];
             obstacles.push({
                 lane: randomLane,
                 z: 1.0,
-                color: randomColor
+                theme: theme
             });
         }
 
         let spawnTimer = 0;
 
-        // --- Custom Vector Sports Car Renderer ---
-        function drawCar(x, y, w, h, primaryColor, isPlayer = false) {
+        // --- Realistic 3D Simulator Car Renderer with Glossy Gradient & Tilt ---
+        function drawCar(x, y, w, h, theme, tiltAngle = 0, isPlayer = false) {
             ctx.save();
+            ctx.translate(x + w / 2, y - h / 2);
+            ctx.rotate(tiltAngle); // Apply steering tilt physics
 
-            // 1. Tires
-            ctx.fillStyle = '#050505';
-            ctx.fillRect(x - w * 0.12, y - h * 0.7, w * 0.14, h * 0.35);
-            ctx.fillRect(x - w * 0.12, y - h * 0.3, w * 0.14, h * 0.35);
-            ctx.fillRect(x + w * 0.98, y - h * 0.7, w * 0.14, h * 0.35);
-            ctx.fillRect(x + w * 0.98, y - h * 0.3, w * 0.14, h * 0.35);
+            let halfW = w / 2;
+            let halfH = h / 2;
 
-            // 2. Main Aerodynamic Body
-            ctx.fillStyle = primaryColor;
+            // 1. Drop Shadow underneath for realism
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
             ctx.beginPath();
-            ctx.moveTo(x + w * 0.2, y - h);
-            ctx.lineTo(x + w * 0.8, y - h);                   
-            ctx.lineTo(x + w * 0.95, y - h * 0.65);           
-            ctx.lineTo(x + w * 0.9, y);                       
-            ctx.lineTo(x + w * 0.1, y);                       
-            ctx.lineTo(x + w * 0.05, y - h * 0.65);           
+            ctx.ellipse(0, halfH - 2, halfW * 0.9, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 2. Realistic Tires
+            ctx.fillStyle = '#111';
+            ctx.fillRect(-halfW - 3, -halfH * 0.5, 6, halfH * 0.5);
+            ctx.fillRect(halfW - 3, -halfH * 0.5, 6, halfH * 0.5);
+            ctx.fillRect(-halfW - 3, halfH * 0.1, 6, halfH * 0.5);
+            ctx.fillRect(halfW - 3, halfH * 0.1, 6, halfH * 0.5);
+
+            // 3. Glossy Metallic Body Gradient
+            let bodyGrad = ctx.createLinearGradient(-halfW, -halfH, halfW, halfH);
+            bodyGrad.addColorStop(0, theme.highlight);
+            bodyGrad.addColorStop(0.5, theme.primary);
+            bodyGrad.addColorStop(1, '#050505');
+
+            ctx.fillStyle = bodyGrad;
+            ctx.beginPath();
+            ctx.moveTo(-halfW * 0.7, -halfH);
+            ctx.lineTo(halfW * 0.7, -halfH);
+            ctx.lineTo(halfW * 0.95, -halfH * 0.3);
+            ctx.lineTo(halfW, halfH * 0.8);
+            ctx.lineTo(-halfW, halfH * 0.8);
+            ctx.lineTo(-halfW * 0.95, -halfH * 0.3);
             ctx.closePath();
             ctx.fill();
 
-            // Body shading
-            ctx.fillStyle = 'rgba(0,0,0,0.25)';
+            // 4. Cockpit Roof & Windows
+            ctx.fillStyle = '#0f172a';
             ctx.beginPath();
-            ctx.moveTo(x + w * 0.5, y - h);
-            ctx.lineTo(x + w * 0.8, y - h);
-            ctx.lineTo(x + w * 0.9, y);
-            ctx.lineTo(x + w * 0.5, y);
-            ctx.closePath();
+            ctx.roundRect(-halfW * 0.6, -halfH * 0.4, halfW * 1.2, halfH * 0.9, 4);
             ctx.fill();
 
-            // 3. Cabin Roof
-            ctx.fillStyle = isPlayer ? '#001122' : '#111111';
+            // Windshield Glass Highlight
+            ctx.fillStyle = '#e0f7fc';
+            ctx.globalAlpha = 0.8;
             ctx.beginPath();
-            ctx.moveTo(x + w * 0.28, y - h * 0.7);
-            ctx.lineTo(x + w * 0.72, y - h * 0.7);
-            ctx.lineTo(x + w * 0.82, y - h * 0.3);
-            ctx.lineTo(x + w * 0.18, y - h * 0.3);
-            ctx.closePath();
-            ctx.fill();
-
-            // 4. Windshield
-            ctx.fillStyle = '#88ffff';
-            ctx.globalAlpha = 0.85;
-            ctx.beginPath();
-            ctx.moveTo(x + w * 0.3, y - h * 0.68);
-            ctx.lineTo(x + w * 0.7, y - h * 0.68);
-            ctx.lineTo(x + w * 0.75, y - h * 0.45);
-            ctx.lineTo(x + w * 0.25, y - h * 0.45);
+            ctx.moveTo(-halfW * 0.5, -halfH * 0.35);
+            ctx.lineTo(halfW * 0.5, -halfH * 0.35);
+            ctx.lineTo(halfW * 0.6, -halfH * 0.05);
+            ctx.lineTo(-halfW * 0.6, -halfH * 0.05);
             ctx.closePath();
             ctx.fill();
             ctx.globalAlpha = 1.0;
 
-            // 5. Headlights / Taillights
+            // 5. Lights
             if (isPlayer) {
+                // Bright Headlights
                 ctx.fillStyle = '#ffffff';
-                ctx.shadowColor = '#ffffff';
-                ctx.shadowBlur = 10;
-                ctx.fillRect(x + w * 0.15, y - h * 0.95, w * 0.18, h * 0.1);
-                ctx.fillRect(x + w * 0.67, y - h * 0.95, w * 0.18, h * 0.1);
+                ctx.shadowColor = '#00ffff';
+                ctx.shadowBlur = 12;
+                ctx.fillRect(-halfW * 0.7, -halfH - 2, 8, 4);
+                ctx.fillRect(halfW * 0.7 - 8, -halfH - 2, 8, 4);
                 ctx.shadowBlur = 0;
             } else {
-                ctx.fillStyle = '#ff0000';
-                ctx.shadowColor = '#ff0000';
-                ctx.shadowBlur = 8;
-                ctx.fillRect(x + w * 0.15, y - h * 0.08, w * 0.2, h * 0.08);
-                ctx.fillRect(x + w * 0.65, y - h * 0.08, w * 0.2, h * 0.08);
+                // Realistic Glowing Taillights
+                ctx.fillStyle = '#ff0033';
+                ctx.shadowColor = '#ff0033';
+                ctx.shadowBlur = 10;
+                ctx.fillRect(-halfW * 0.8, halfH * 0.7, 10, 5);
+                ctx.fillRect(halfW * 0.8 - 10, halfH * 0.7, 10, 5);
                 ctx.shadowBlur = 0;
             }
 
@@ -272,15 +285,19 @@
         function update() {
             if (!isPlaying) return;
 
-            let targetOffset = playerLane * 75;
-            currentLaneOffset += (targetOffset - currentLaneOffset) * 0.2;
+            let targetOffset = playerLane * 85;
+            let diff = targetOffset - currentLaneOffset;
+            currentLaneOffset += diff * 0.2;
+            
+            // Calculate smooth steering tilt based on movement direction
+            carTilt += ((diff * 0.003) - carTilt) * 0.15;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // --- Draw Road & Environment ---
             let centerX = canvas.width / 2;
 
-            ctx.fillStyle = '#111a11';
+            // --- Realistic Road Environment & Grass ---
+            ctx.fillStyle = '#0e2315'; // Dark realistic grass
             ctx.fillRect(0, horizonY, canvas.width, canvas.height - horizonY);
 
             let roadTopLeft = centerX - roadTopWidth / 2;
@@ -288,7 +305,8 @@
             let roadBottomLeft = centerX - roadBottomWidth / 2;
             let roadBottomRight = centerX + roadBottomWidth / 2;
 
-            ctx.fillStyle = '#1b1b22';
+            // Asphalt Road Surface
+            ctx.fillStyle = '#212529';
             ctx.beginPath();
             ctx.moveTo(roadTopLeft, horizonY);
             ctx.lineTo(roadTopRight, horizonY);
@@ -296,9 +314,9 @@
             ctx.lineTo(roadBottomLeft, canvas.height);
             ctx.fill();
 
-            // Neon Borders
-            ctx.strokeStyle = '#00ffff';
-            ctx.lineWidth = 4;
+            // Road Shoulder Striping (Red & White kerb simulator effect)
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 5;
             ctx.beginPath();
             ctx.moveTo(roadTopLeft, horizonY);
             ctx.lineTo(roadBottomLeft, canvas.height);
@@ -306,11 +324,11 @@
             ctx.lineTo(roadBottomRight, canvas.height);
             ctx.stroke();
 
-            // Center dashes
-            roadOffset = (roadOffset + gameSpeed * 0.8) % 40;
-            ctx.strokeStyle = '#ff00ff';
+            // Center Dashed Lanes
+            roadOffset = (roadOffset + gameSpeed * 1.2) % 50;
+            ctx.strokeStyle = '#ffd166';
             ctx.lineWidth = 3;
-            ctx.setLineDash([15, 25]);
+            ctx.setLineDash([20, 30]);
             ctx.lineDashOffset = -roadOffset;
             ctx.beginPath();
             ctx.moveTo(centerX, horizonY);
@@ -320,20 +338,20 @@
 
             // --- Obstacles ---
             spawnTimer++;
-            if (spawnTimer > 60) {
+            if (spawnTimer > 55) {
                 spawnObstacle();
                 spawnTimer = 0;
             }
 
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 let obs = obstacles[i];
-                obs.z -= gameSpeed * 0.0035;
+                obs.z -= gameSpeed * 0.0032;
 
                 if (obs.z <= 0.05) {
                     obstacles.splice(i, 1);
-                    score += 10;
+                    score += 15;
                     playSound('score');
-                    if (score % 50 === 0) gameSpeed += 0.5;
+                    if (score % 60 === 0) gameSpeed += 0.4;
                     continue;
                 }
 
@@ -341,13 +359,14 @@
                 let obsY = horizonY + (canvas.height - horizonY) * (1 - obs.z);
                 let roadWidthAtZ = roadTopWidth + (roadBottomWidth - roadTopWidth) * (1 - obs.z);
                 let laneWidthAtZ = roadWidthAtZ / 3;
-                let obsX = centerX + (obs.lane * laneWidthAtZ) - (laneWidthAtZ * 0.3);
+                let obsX = centerX + (obs.lane * laneWidthAtZ) - (laneWidthAtZ * 0.35);
 
-                let w = 75 * scale;
-                let h = 50 * scale;
+                let w = 80 * scale;
+                let h = 90 * scale;
 
-                drawCar(obsX, obsY, w, h, obs.color, false);
+                drawCar(obsX, obsY, w, h, obs.theme, 0, false);
 
+                // Collision detection box
                 if (obs.z < 0.22 && obs.z > 0.08) {
                     if (obs.lane === playerLane) {
                         playSound('crash');
@@ -357,25 +376,29 @@
                 }
             }
 
-            // --- Player Car ---
+            // --- Player Car (Simulator POV) ---
             let pWidth = 110;
-            let pHeight = 70;
+            let pHeight = 120;
             let pX = centerX - pWidth / 2 + currentLaneOffset;
-            let pY = canvas.height - 85;
+            let pY = canvas.height - 110;
 
-            ctx.shadowColor = '#00ffff';
-            ctx.shadowBlur = 20;
-            drawCar(pX, pY, pWidth, pHeight, '#00ffff', true);
-            ctx.shadowBlur = 0;
+            let playerTheme = { primary: '#00b4d8', highlight: '#90e0ef' };
+            drawCar(pX, pY, pWidth, pHeight, playerTheme, carTilt, true);
 
-            // --- HUD ---
+            // --- Simulator HUD ---
+            ctx.fillStyle = 'rgba(10, 15, 25, 0.8)';
+            ctx.fillRect(15, 15, 160, 65);
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(15, 15, 160, 65);
+
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 22px sans-serif';
+            ctx.font = 'bold 18px sans-serif';
             ctx.textAlign = 'left';
-            ctx.fillText(`SCORE: ${score}`, 20, 35);
-            ctx.fillStyle = 'rgba(255,255,255,0.6)';
+            ctx.fillText(`SCORE: ${score}`, 28, 40);
+            ctx.fillStyle = '#00d4ff';
             ctx.font = '14px sans-serif';
-            ctx.fillText(`HIGH: ${highScore}`, 20, 60);
+            ctx.fillText(`HIGH: ${highScore}`, 28, 65);
 
             requestAnimationFrame(update);
         }
@@ -384,24 +407,24 @@
             isPlaying = false;
             if (score > highScore) {
                 highScore = score;
-                localStorage.setItem('turboHighScore', highScore);
+                localStorage.setItem('turboSimHighScore', highScore);
             }
 
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            ctx.fillStyle = 'rgba(5, 8, 15, 0.9)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            ctx.fillStyle = '#ff00ff';
-            ctx.font = 'bold 40px sans-serif';
+            ctx.fillStyle = '#ff007f';
+            ctx.font = 'bold 36px sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText('CRASHED!', canvas.width / 2, canvas.height / 2 - 30);
+            ctx.fillText('CRASHED!', canvas.width / 2, canvas.height / 2 - 40);
 
             ctx.fillStyle = '#ffffff';
-            ctx.font = '22px sans-serif';
-            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 15);
+            ctx.font = '20px sans-serif';
+            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 5);
 
-            ctx.fillStyle = '#00ffff';
-            ctx.font = '18px sans-serif';
-            ctx.fillText('Tap buttons to Restart', canvas.width / 2, canvas.height / 2 + 65);
+            ctx.fillStyle = '#00d4ff';
+            ctx.font = '16px sans-serif';
+            ctx.fillText('Tap to Restart Simulation', canvas.width / 2, canvas.height / 2 + 55);
 
             leftBtn.onclick = restartGame;
             rightBtn.onclick = restartGame;
@@ -410,17 +433,18 @@
         function restartGame() {
             initAudio();
             score = 0;
-            gameSpeed = 5;
+            gameSpeed = 6;
             obstacles = [];
             playerLane = 0;
             currentLaneOffset = 0;
+            carTilt = 0;
             isPlaying = true;
 
             leftBtn.onclick = null;
             rightBtn.onclick = null;
             leftBtn.addEventListener('touchstart', moveLeft);
             rightBtn.addEventListener('touchstart', moveRight);
-            rightBtn.addEventListener('mousedown', moveLeft);
+            leftBtn.addEventListener('mousedown', moveLeft);
             rightBtn.addEventListener('mousedown', moveRight);
 
             requestAnimationFrame(update);
